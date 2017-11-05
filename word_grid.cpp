@@ -128,25 +128,23 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
         return std::optional<int>();
     };
 
-    auto width_opt = convert_dim(argv[optind], "width");
-    auto height_opt = convert_dim(argv[optind + 1], "height");
+    auto width = convert_dim(argv[optind], "width");
+    auto height = convert_dim(argv[optind + 1], "height");
 
-    if(!width_opt || !height_opt)
+    if(!width || !height)
         return std::nullopt;
 
-    args.width = width_opt.value();
-    args.height = height_opt.value();
+    args.width = *width;
+    args.height = *height;
 
     return std::make_optional(args);
 }
 
 int main(int argc, char ** argv)
 {
-    auto args_opt = parse_arguments(argc, argv);
-    if(!args_opt)
+    auto args = parse_arguments(argc, argv);
+    if(!args)
         return EXIT_FAILURE;
-
-    auto args = args_opt.value();
 
     return EXIT_SUCCESS;
 }
