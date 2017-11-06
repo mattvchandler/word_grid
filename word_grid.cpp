@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -235,6 +236,71 @@ get_word_lists(const Args & args)
     }
 }
 
+void find_grids(const std::vector<std::string> & word_list, const std::unordered_set<std::string> & col_list, const int height, const std::vector<std::string> & rows = {})
+{
+    // On the last row
+    if(static_cast<int>(rows.size()) == height - 1)
+    {
+        for(const auto & word: word_list)
+        {
+            // for each word, check columns to see if they are valid
+            auto match = true;
+            for(std::size_t i = 0; i < word.size(); ++i)
+            {
+                std::string col;
+                for(const auto & row: rows)
+                    col += row[i];
+                col += word[i];
+
+                if(!col_list.count(col))
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if(match)
+            {
+                for(const auto & row: rows)
+                    std::cout<<row<<"\n";
+                std::cout<<word<<"\n"<<std::endl;
+            }
+        }
+        return;
+    }
+
+    std::array<std::vector<std::string>, ALPHABET_LEN> words_by_letters;
+
+    for(const auto & word: word_list)
+    {
+        for(const auto & c: word)
+        {
+            words_by_letters[c - 'A'].push_back(word);
+        }
+    }
+
+    for(const auto & word: word_list)
+    {
+        auto next_word_list{word_list};
+        typeof(next_word_list) next_word_list_out;
+
+        for(const auto & c: word)
+        {
+            next_word_list_out.clear();
+            std::set_difference(next_word_list.begin(), next_word_list.end(),
+                words_by_letters[c - 'A'].begin(), words_by_letters[c - 'A'].end(),
+                std::inserter(next_word_list_out, next_word_list_out.begin()));
+
+            std::swap(next_word_list, next_word_list_out);
+        }
+
+        auto next_rows = rows;
+        next_rows.push_back(word);
+
+        find_grids(next_word_list, col_list, height, next_rows);
+    }
+}
+
 int main(int argc, char ** argv)
 {
     auto args = parse_arguments(argc, argv);
@@ -246,6 +312,8 @@ int main(int argc, char ** argv)
         return EXIT_FAILURE;
 
     auto [row_words, col_words] = *words;
+
+    find_grids(row_words, col_words, args->height);
 
     return EXIT_SUCCESS;
 }
