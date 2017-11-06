@@ -18,11 +18,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <string>
+#include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <string>
+#include <tuple>
+#include <unordered_set>
+#include <vector>
+
+#include <cstring>
 
 #include <getopt.h>
+
+const int ALPHABET_LEN = 26;
 
 struct Args
 {
@@ -76,11 +85,11 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
                     "Word grid generator\n\n"
                     "Positional arguments:\n"
                     "  WIDTH HEIGHT          Width and height of grid to generate.\n"
-                    "                        Width × Height must be ≤ 26\n\n"
+                  u8"                        Width × Height must be ≤ "<<ALPHABET_LEN<<"\n\n"
                     "Optional arguments\n"
                     "  -h, --help            Show this help message and exit\n"
                     "  -n, --no-apostrophe   Don't generate words with apostrophes\n"
-                    "  -s  --small-words     Dont' restrict small (≤ 2 letters) to\n"
+                  u8"  -s  --small-words     Dont' restrict small (≤ 2 letters) to\n"
                     "                        internally defined list\n"
                     " --dictionary DICTIONARY\n"
                     "  -d DICTIONARY         Dictionary file (defaults to /usr/share/dict/words)\n";
@@ -137,7 +146,93 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
     args.width = *width;
     args.height = *height;
 
+    if(args.width * args.height > ALPHABET_LEN)
+    {
+        std::cerr<<u8"Width × Height is too large. Must be ≤ 26\n";
+        return std::nullopt;
+    }
+
     return std::make_optional(args);
+}
+
+std::optional<std::tuple<std::vector<std::string>, std::unordered_set<std::string>>>
+get_word_lists(const Args & args)
+{
+    std::ifstream dictionary(args.dictionary_filename);
+    try
+    {
+        dictionary.exceptions(std::ifstream::failbit | std::ifstream::badbit); // throw on error OR failure
+    }
+    catch(std::system_error & e)
+    {
+        std::cerr<<"Error opening "<<args.dictionary_filename<<": "<<std::strerror(errno)<<std::endl;
+        return std::nullopt;
+    }
+
+    try
+    {
+        dictionary.exceptions(std::ifstream::badbit); // only throw on error
+
+        std::unordered_set<std::string> row_words;
+        std::unordered_set<std::string> col_words;
+
+        std::string word;
+        while(std::getline(dictionary, word, '\n'))
+        {
+            if(args.use_apostrophe)
+                word.erase(std::remove(word.begin(), word.end(), '\''), word.end());
+
+            std::vector<char> seen;
+
+            bool skip_word = false;
+            for(auto &c: word)
+            {
+                c = std::toupper(c);
+                if(c < 'A' || c > 'Z')
+                {
+                    skip_word = true;
+                    break;
+                }
+
+                if(std::find(seen.begin(), seen.end(), c) != seen.end())
+                {
+                    skip_word = true;
+                    break;
+                }
+                seen.push_back(c);
+            }
+            if(skip_word)
+                continue;
+
+            const std::unordered_set<std::string> legal_small_words
+            {
+                "A", "I",
+                "AH", "AM", "AN", "AS", "AT", "BE", "BY", "DC", "DO",
+                "DR", "EX", "GO", "HA", "HE", "HI", "HO", "IF", "IN", "IS",
+                "IT", "LA", "LO", "MA", "ME", "MR", "MS", "MY", "NO", "OF",
+                "OH", "OK", "ON", "OR", "OW", "OX", "PA", "PI", "SO", "ST",
+                "TO", "UP", "US", "WE"
+            };
+
+            if(args.restrict_small_words && word.size() <= 2 && !legal_small_words.count(word))
+                continue;
+
+            if(static_cast<int>(word.size()) == args.width)
+                row_words.insert(word);
+            if(static_cast<int>(word.size()) == args.height)
+                col_words.insert(word);
+        }
+
+        std::vector<std::string>row_words_list(row_words.begin(), row_words.end());
+        std::sort(row_words_list.begin(), row_words_list.end());
+
+        return std::make_optional(std::make_tuple(row_words_list, col_words));
+    }
+    catch(std::system_error & e)
+    {
+        std::cerr<<"Error reading "<<args.dictionary_filename<<": "<<std::strerror(errno)<<std::endl;
+        return std::nullopt;
+    }
 }
 
 int main(int argc, char ** argv)
@@ -145,6 +240,12 @@ int main(int argc, char ** argv)
     auto args = parse_arguments(argc, argv);
     if(!args)
         return EXIT_FAILURE;
+
+    auto words = get_word_lists(*args);
+    if(!words)
+        return EXIT_FAILURE;
+
+    auto [row_words, col_words] = *words;
 
     return EXIT_SUCCESS;
 }
