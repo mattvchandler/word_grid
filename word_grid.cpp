@@ -197,7 +197,7 @@ get_word_lists(const Args & args)
 
             std::vector<char> seen;
 
-            bool skip_word = false;
+            auto skip_word = false;
             for(auto &c: word)
             {
                 c = std::toupper(c);
@@ -260,7 +260,8 @@ get_word_lists(const Args & args)
 void find_grids(const std::vector<std::string> & word_list,
                 const std::vector<std::unordered_set<std::string>> & col_prefixes,
                 const int height,
-                const std::vector<std::string> & rows = {})
+                const std::vector<std::string> & cols,
+                const std::vector<std::string> & rows)
 {
     // try each word to see if it will fit
     // TODO: parallelize. The below should wor once C++17 libraries have it
@@ -270,14 +271,12 @@ void find_grids(const std::vector<std::string> & word_list,
     {
         // check to see if adding this word would fit prefixes
         auto match = true;
+        auto next_cols = cols;
         for(std::size_t i = 0; i < word.size(); ++i)
         {
-            std::string col;
-            for(const auto & row: rows)
-                col += row[i];
-            col += word[i];
+            next_cols[i] += word[i];
 
-            if(!col_prefixes[col.size() - 1].count(col))
+            if(!col_prefixes[next_cols[i].size() - 1].count(next_cols[i]))
             {
                 match = false;
                 break;
@@ -308,7 +307,7 @@ void find_grids(const std::vector<std::string> & word_list,
         next_rows.push_back(word);
 
         // continue next row with newly reduced list
-        find_grids(next_word_list, col_prefixes, height, next_rows);
+        find_grids(next_word_list, col_prefixes, height, next_cols, next_rows);
     }
 }
 
@@ -324,7 +323,8 @@ int main(int argc, char ** argv)
 
     auto [row_words, col_prefixes] = *words;
 
-    find_grids(row_words, col_prefixes, args->height);
+    find_grids(row_words, col_prefixes, args->height,
+        std::vector<std::string>(args->width), {});
 
     return EXIT_SUCCESS;
 }
