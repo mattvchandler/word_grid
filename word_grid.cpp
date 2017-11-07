@@ -262,9 +262,10 @@ void find_grids(const std::vector<std::string> & word_list,
                 const int height,
                 const std::vector<std::string> & rows = {})
 {
-    // On the last ro
     // try each word to see if it will fit
-    // TODO: parallelize?
+    // TODO: parallelize. The below should wor once C++17 libraries have it
+    // for_each(std::execution::par, word_list.begin(), word_list.end(),
+    //         [&word_list, &col_prefixes, height, &rows](const auto & word)
     for(const auto & word: word_list)
     {
         // check to see if adding this word would fit prefixes
@@ -298,7 +299,6 @@ void find_grids(const std::vector<std::string> & word_list,
         // generate new list of words, removing any that share a letter with this one
         auto next_word_list = word_list;
 
-        // TODO: parallelize this too?
         next_word_list.erase(std::remove_if(next_word_list.begin(), next_word_list.end(),
                     [&word](const std::string & try_word)
                     {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end();}),
