@@ -222,6 +222,8 @@ get_word_lists(const Args & args)
                 row_words.insert(word);
             if(static_cast<int>(word.size()) == args.height)
                 col_words.insert(word);
+
+            // TODO: generate [2-height] prefixes to check against
         }
 
         std::vector<std::string>row_words_list(row_words.begin(), row_words.end());
@@ -236,9 +238,13 @@ get_word_lists(const Args & args)
     }
 }
 
-void find_grids(const std::vector<std::string> & word_list, const std::unordered_set<std::string> & col_list, const int height, const std::vector<std::string> & rows = {})
+void find_grids(const std::vector<std::string> & word_list,
+                const std::unordered_set<std::string> & col_list,
+                const int height,
+                const std::vector<std::string> & rows = {})
 {
     // On the last row
+    // TODO: move to new function
     if(static_cast<int>(rows.size()) == height - 1)
     {
         for(const auto & word: word_list)
@@ -259,6 +265,7 @@ void find_grids(const std::vector<std::string> & word_list, const std::unordered
                 }
             }
 
+            // print result grid
             if(match)
             {
                 for(const auto & row: rows)
@@ -271,6 +278,7 @@ void find_grids(const std::vector<std::string> & word_list, const std::unordered
 
     std::array<std::vector<std::string>, ALPHABET_LEN> words_by_letters;
 
+    // build a set per letter of each word containing that letter
     for(const auto & word: word_list)
     {
         for(const auto & c: word)
@@ -279,24 +287,23 @@ void find_grids(const std::vector<std::string> & word_list, const std::unordered
         }
     }
 
+    // try each word to see if it will fit
+    // TODO: parallelize?
     for(const auto & word: word_list)
     {
-        auto next_word_list{word_list};
-        typeof(next_word_list) next_word_list_out;
+        // generate new list of words, removing any that share a letter with this one
+        auto next_word_list = word_list;
 
-        for(const auto & c: word)
-        {
-            next_word_list_out.clear();
-            std::set_difference(next_word_list.begin(), next_word_list.end(),
-                words_by_letters[c - 'A'].begin(), words_by_letters[c - 'A'].end(),
-                std::inserter(next_word_list_out, next_word_list_out.begin()));
-
-            std::swap(next_word_list, next_word_list_out);
-        }
+        // TODO: parallelize this too?
+        next_word_list.erase(std::remove_if(next_word_list.begin(), next_word_list.end(),
+                    [&word](const std::string & try_word)
+                    {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end(); }),
+                next_word_list.end());
 
         auto next_rows = rows;
         next_rows.push_back(word);
 
+        // continue next row with newly reduced list
         find_grids(next_word_list, col_list, height, next_rows);
     }
 }
