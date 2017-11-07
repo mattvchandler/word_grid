@@ -168,7 +168,7 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
     return std::make_optional(args);
 }
 
-std::optional<std::tuple<std::vector<std::string>, std::unordered_set<std::string>>>
+std::optional<std::tuple<std::vector<std::string>, std::vector<std::unordered_set<std::string>>>>
 get_word_lists(const Args & args)
 {
     std::ifstream dictionary(args.dictionary_filename);
@@ -241,13 +241,14 @@ get_word_lists(const Args & args)
         std::sort(row_words_list.begin(), row_words_list.end());
 
         // build list of 1,2,…,height -1, height col prefixes to check against
-        std::vector<std::unordered_set<std::string>>> col_prefixes;
-        for(const auto & col: col_list)
+        std::vector<std::unordered_set<std::string>> col_prefixes(args.height);
+        for(const auto & col: col_words)
         {
-            for(std::size_t i = 0; i < height
+            for(std::size_t i = 0; i < static_cast<std::size_t>(args.height); ++i)
+                col_prefixes[i].insert(col.substr(0, i + 1));
         }
 
-        return std::make_optional(std::make_tuple(row_words_list, col_words));
+        return std::make_optional(std::make_tuple(row_words_list, col_prefixes));
     }
     catch(std::system_error & e)
     {
@@ -257,72 +258,57 @@ get_word_lists(const Args & args)
 }
 
 void find_grids(const std::vector<std::string> & word_list,
-                const std::unordered_set<std::string> & col_list,
+                const std::vector<std::unordered_set<std::string>> & col_prefixes,
                 const int height,
                 const std::vector<std::string> & rows = {})
 {
-    // On the last row
-    // TODO: move to new function
-    if(static_cast<int>(rows.size()) == height - 1)
-    {
-        for(const auto & word: word_list)
-        {
-            // for each word, check columns to see if they are valid
-            auto match = true;
-            for(std::size_t i = 0; i < word.size(); ++i)
-            {
-                std::string col;
-                for(const auto & row: rows)
-                    col += row[i];
-                col += word[i];
-
-                if(!col_list.count(col))
-                {
-                    match = false;
-                    break;
-                }
-            }
-
-            // print result grid
-            if(match)
-            {
-                for(const auto & row: rows)
-                    std::cout<<row<<"\n";
-                std::cout<<word<<"\n"<<std::endl;
-            }
-        }
-        return;
-    }
-
-    std::array<std::vector<std::string>, ALPHABET_LEN> words_by_letters;
-
-    // build a set per letter of each word containing that letter
-    for(const auto & word: word_list)
-    {
-        for(const auto & c: word)
-        {
-            words_by_letters[c - 'A'].push_back(word);
-        }
-    }
-
+    // On the last ro
     // try each word to see if it will fit
     // TODO: parallelize?
     for(const auto & word: word_list)
     {
+        // check to see if adding this word would fit prefixes
+        auto match = true;
+        for(std::size_t i = 0; i < word.size(); ++i)
+        {
+            std::string col;
+            for(const auto & row: rows)
+                col += row[i];
+            col += word[i];
+
+            if(!col_prefixes[col.size() - 1].count(col))
+            {
+                match = false;
+                break;
+            }
+        }
+
+        if(!match)
+            continue;
+
+        // if this is the last row, print, continue
+        if(static_cast<int>(rows.size()) == height - 1)
+        {
+            for(const auto & row: rows)
+                std::cout<<row<<"\n";
+            std::cout<<word<<"\n"<<std::endl;
+            continue;
+        }
+
         // generate new list of words, removing any that share a letter with this one
         auto next_word_list = word_list;
 
         // TODO: parallelize this too?
         next_word_list.erase(std::remove_if(next_word_list.begin(), next_word_list.end(),
                     [&word](const std::string & try_word)
-                    {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end(); }),
+                    {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end();}),
                 next_word_list.end());
 
         auto next_rows = rows;
         next_rows.push_back(word);
 
         // continue next row with newly reduced list
-        find_grids(next_word_list, col_list, height, next_rows);
+        find_grids(next_word_list, col_prefixes, height, next_rows);
     }
 }
 
@@ -336,9 +322,9 @@ int main(int argc, char ** argv)
     if(!words)
         return EXIT_FAILURE;
 
-    auto [row_words, col_words] = *words;
+    auto [row_words, col_prefixes] = *words;
 
-    find_grids(row_words, col_words, args->height);
+    find_grids(row_words, col_prefixes, args->height);
 
     return EXIT_SUCCESS;
 }
