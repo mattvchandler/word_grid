@@ -147,6 +147,18 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
     args.width = *width;
     args.height = *height;
 
+    if(args.width <= 0)
+    {
+        std::cerr<<"Width is too small. Must be > 0\n";
+        return std::nullopt;
+    }
+
+    if(args.height <= 0)
+    {
+        std::cerr<<"Height is too small. Must be > 0\n";
+        return std::nullopt;
+    }
+
     if(args.width * args.height > ALPHABET_LEN)
     {
         std::cerr<<u8"Width × Height is too large. Must be ≤ 26\n";
@@ -222,12 +234,18 @@ get_word_lists(const Args & args)
                 row_words.insert(word);
             if(static_cast<int>(word.size()) == args.height)
                 col_words.insert(word);
-
-            // TODO: generate [2-height] prefixes to check against
         }
 
+        // put row words into a sorted list
         std::vector<std::string>row_words_list(row_words.begin(), row_words.end());
         std::sort(row_words_list.begin(), row_words_list.end());
+
+        // build list of 1,2,…,height -1, height col prefixes to check against
+        std::vector<std::unordered_set<std::string>>> col_prefixes;
+        for(const auto & col: col_list)
+        {
+            for(std::size_t i = 0; i < height
+        }
 
         return std::make_optional(std::make_tuple(row_words_list, col_words));
     }
