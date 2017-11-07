@@ -22,8 +22,10 @@
 #include <array>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <unordered_set>
 #include <vector>
@@ -257,57 +259,60 @@ get_word_lists(const Args & args)
     }
 }
 
-void find_grids(const std::vector<std::string> & word_list,
+std::mutex cout_mutex;
+
+void find_grids(const std::string & word,
+                const std::vector<std::string> & word_list,
                 const std::vector<std::unordered_set<std::string>> & col_prefixes,
                 const int height,
                 const std::vector<std::string> & cols,
                 const std::vector<std::string> & rows)
 {
-    // try each word to see if it will fit
-    // TODO: parallelize. The below should wor once C++17 libraries have it
-    // for_each(std::execution::par, word_list.begin(), word_list.end(),
-    //         [&word_list, &col_prefixes, height, &rows](const auto & word)
-    for(const auto & word: word_list)
+    // std::cout<<"thread: "<<std::this_thread::get_id()<<" "<<word<<"\n";
+    // check to see if adding this word would fit prefixes
+    auto match = true;
+    auto next_cols = cols;
+    for(std::size_t i = 0; i < word.size(); ++i)
     {
-        // check to see if adding this word would fit prefixes
-        auto match = true;
-        auto next_cols = cols;
-        for(std::size_t i = 0; i < word.size(); ++i)
+        next_cols[i] += word[i];
+
+        if(!col_prefixes[next_cols[i].size() - 1].count(next_cols[i]))
         {
-            next_cols[i] += word[i];
-
-            if(!col_prefixes[next_cols[i].size() - 1].count(next_cols[i]))
-            {
-                match = false;
-                break;
-            }
+            match = false;
+            break;
         }
+    }
 
-        if(!match)
-            continue;
+    if(!match)
+        return;
 
-        // if this is the last row, print, continue
-        if(static_cast<int>(rows.size()) == height - 1)
-        {
-            for(const auto & row: rows)
-                std::cout<<row<<"\n";
-            std::cout<<word<<"\n"<<std::endl;
-            continue;
-        }
+    // if this is the last row, print, continue
+    if(static_cast<int>(rows.size()) == height - 1)
+    {
+        std::scoped_lock lock{cout_mutex};
 
-        // generate new list of words, removing any that share a letter with this one
-        auto next_word_list = word_list;
+        for(const auto & row: rows)
+            std::cout<<row<<"\n";
+        std::cout<<word<<"\n"<<std::endl;
 
-        next_word_list.erase(std::remove_if(next_word_list.begin(), next_word_list.end(),
-                    [&word](const std::string & try_word)
-                    {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end();}),
-                next_word_list.end());
+        return;
+    }
 
-        auto next_rows = rows;
-        next_rows.push_back(word);
+    // generate new list of words, removing any that share a letter with this one
+    auto next_word_list = word_list;
 
-        // continue next row with newly reduced list
-        find_grids(next_word_list, col_prefixes, height, next_cols, next_rows);
+    next_word_list.erase(std::remove_if(next_word_list.begin(), next_word_list.end(),
+                [&word](const std::string & try_word)
+                {return std::find_first_of(try_word.begin(), try_word.end(), word.begin(), word.end()) != try_word.end();}),
+            next_word_list.end());
+
+    auto next_rows = rows;
+    next_rows.push_back(word);
+
+    // continue next row with newly reduced list
+    for(const auto & next_word: next_word_list)
+    {
+        find_grids(next_word, next_word_list, col_prefixes, height, next_cols, next_rows);
     }
 }
 
@@ -323,8 +328,26 @@ int main(int argc, char ** argv)
 
     auto [row_words, col_prefixes] = *words;
 
-    find_grids(row_words, col_prefixes, args->height,
-        std::vector<std::string>(args->width), {});
+    const auto num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> thread_pool;
+    auto chunk_size = row_words.size() / num_threads;
+
+    // create num_threads threads, and divide row_words between them
+    // TODO: replace this with std::for_each(std::execution::par, …) once GCC / clang support it
+    for(std::size_t i = 0; i < num_threads; ++i)
+    {
+        thread_pool.emplace_back([chunk_size, &row_words, &col_prefixes, &args](const std::size_t i)
+        {
+            for(std::size_t j = chunk_size * i; j < chunk_size * (i + 1); ++j)
+            {
+                find_grids(row_words[j], row_words, col_prefixes, args->height,
+                    std::vector<std::string>(args->width), {});
+            }
+        }, i);
+    }
+
+    for(auto & t: thread_pool)
+        t.join();
 
     return EXIT_SUCCESS;
 }
