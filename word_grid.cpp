@@ -66,7 +66,7 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
     if(sep_pos != std::string::npos)
         prog_name = prog_name.substr(sep_pos + 1);
 
-    auto usage = "usage: " + prog_name + " [-h] [-n] [-s] WIDTH HEIGHT\n";
+    auto usage = "usage: " + prog_name + " [-h] [-n] [-s] [-d DICTONARY] WIDTH HEIGHT\n";
 
     int ind = 0;
     while((opt = getopt_long(argc, argv, ":hd:sn", longopts, &ind)) != -1)
@@ -92,9 +92,9 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
                     "Optional arguments\n"
                     "  -h, --help            Show this help message and exit\n"
                     "  -n, --no-apostrophe   Don't generate words with apostrophes\n"
-                  u8"  -s  --small-words     Dont' restrict small (≤ 2 letters) to\n"
+                  u8"  -s, --small-words     Dont' restrict small (≤ 2 letters) to\n"
                     "                        internally defined list\n"
-                    " --dictionary DICTIONARY\n"
+                    " --dictionary DICTIONARY,\n"
                     "  -d DICTIONARY         Dictionary file (defaults to /usr/share/dict/words)\n";
                 return std::nullopt;
             case ':':
@@ -163,7 +163,7 @@ std::optional<Args> parse_arguments(int argc, char ** argv)
 
     if(args.width * args.height > ALPHABET_LEN)
     {
-        std::cerr<<u8"Width × Height is too large. Must be ≤ 26\n";
+        std::cerr<<u8"Width × Height is too large. Must be ≤ "<<ALPHABET_LEN<<"\n";
         return std::nullopt;
     }
 
